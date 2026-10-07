@@ -29,6 +29,8 @@ jobs:
         run: cp index.source.html index.html
       - name: Build
         run: npm run build
+      - name: Rename Pages entrypoint
+        run: mv dist/index.source.html dist/index.html
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:

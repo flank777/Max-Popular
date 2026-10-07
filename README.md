@@ -19,7 +19,15 @@ npm run build
 
 O repositor pode ler um QR Code de gôndola ou informar códigos como `03-02` e `GONDOLA-03-PRATELEIRA-02`. Após localizar a posição, confere o checklist, busca ou escaneia o produto e registra o resultado no histórico local do navegador.
 
-## Estrutura
+## Tecnologias
+
+- React
+- TypeScript
+- Vite
+- PWA
+- `html5-qrcode`
+
+## Estrutura do projeto
 
 - `src/components`: componentes visuais reutilizáveis.
 - `src/data/mocks`: dados de demonstração.
