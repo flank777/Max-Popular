@@ -1,0 +1,9 @@
+{
+  "name": "Drogarias Maxi Popular | Repositor",
+  "short_name": "Maxi Popular",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f9fa",
+  "theme_color": "#075985",
+  "lang": "pt-BR"
+}
