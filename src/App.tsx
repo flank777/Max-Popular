@@ -1,13 +1,161 @@
-import{useEffect,useMemo,useRef,useState}from'react';import{ArrowLeftRight,Bell,Check,CircleUserRound,Download,Flag,Home,Plus,Settings,Target,Trophy,Upload,Volume2,VolumeX,X}from'lucide-react';import type{AppData,Goal,Transaction}from'./types';import{storage}from'./storage';import{generateSavingsChallenge,goalSaved,money,uid}from'./utils';import{setSound,sound}from'./audio';
-type Tab='summary'|'goals'|'transactions'|'profile';
-const formatDate=(iso:string)=>new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(iso));
-function GoalCard({goal,transactions,onOpen}:{goal:Goal;transactions:Transaction[];onOpen:()=>void}){const saved=goalSaved(goal,transactions),pct=Math.min(100,saved/goal.targetAmount*100);return <button className="goal-row" onClick={onOpen}><span className="goal-emoji">{goal.emoji}</span><span><strong>{goal.name}</strong><small>{money(saved)} de {money(goal.targetAmount)}</small><i><b style={{width:`${pct}%`}}/></i></span><em>{pct.toFixed(0)}%</em></button>}
-function AddModal({remaining,onClose,onAdd}:{remaining:number;onClose:()=>void;onAdd:(n:number)=>void}){const[value,setValue]=useState('');const cents=Math.round(Number(value.replace(',','.'))*100)||0;return <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><div className="sheet"><div className="grab"/><button className="close" onClick={onClose}><X/></button><span className="sheet-icon"><Plus/></span><h2>Adicionar dinheiro</h2><p>Quanto você guardou para esta meta?</p><label className="money-input"><span>R$</span><input autoFocus inputMode="decimal" placeholder="0,00" value={value} onChange={e=>setValue(e.target.value.replace(/[^0-9,.]/g,''))}/></label><div className="quick">{[1000,2000,5000,10000,20000,50000].filter(n=>n<=remaining).map(n=><button key={n} onClick={()=>setValue(String(n/100).replace('.',','))}>{money(n,true)}</button>)}</div><button className="primary" disabled={!cents||cents>remaining} onClick={()=>onAdd(cents)}>Adicionar à meta</button>{cents>remaining&&<small className="error">O valor é maior que o restante da meta.</small>}</div></div>}
-function Challenge({goal,transactions,onToggle}:{goal:Goal;transactions:Transaction[];onToggle:(id:string)=>void}){const done=goal.challenge.filter(i=>i.completed).length;return <section className="challenge"><div className="section-title"><div><span>SEU DESAFIO</span><h2>Depósitos</h2></div><b>{done} de {goal.challenge.length}</b></div><p className="hint">Escolha uma bolinha sempre que guardar este valor.</p><div className="grid">{goal.challenge.map((item,index)=><button style={{animationDelay:`${Math.min(index,20)*18}ms`}} aria-label={`${item.completed?'Remover':'Marcar'} depósito de ${money(item.amount)}`} className={item.completed?'done':''} key={item.id} onClick={()=>onToggle(item.id)}><span>{money(item.amount,true)}</span>{item.completed&&<i><Check size={13}/></i>}</button>)}</div></section>}
-function GoalDetail({goal,transactions,onToggle,onAdd,onBack}:{goal:Goal;transactions:Transaction[];onToggle:(id:string)=>void;onAdd:()=>void;onBack:()=>void}){const saved=goalSaved(goal,transactions),remaining=Math.max(0,goal.targetAmount-saved),pct=Math.min(100,saved/goal.targetAmount*100),months=Math.ceil(remaining/goal.monthlyAmount);return <><header className="top"><button onClick={onBack} className="back">‹</button><div><small>MINHA META</small><h1>{goal.name}</h1></div><span className="header-icon"><Target/></span></header><main><section className="hero-card"><div className="hero-copy"><span>VALOR DA META</span><strong>{money(goal.targetAmount,true)}</strong></div>{goal.image?<img src={goal.image} alt="Moto preta da meta"/>:<div className="big-emoji">{goal.emoji}</div>}<div className="progress-ring" style={{'--progress':`${pct*3.6}deg`} as any}><div><b>{pct.toFixed(1).replace('.',',')}%</b><small>concluído</small></div></div><div className="metrics"><div><span>Economizado</span><strong>{money(saved)}</strong></div><div><span>Faltam</span><strong>{money(remaining)}</strong></div></div><div className="bar"><i style={{width:`${pct}%`}}/></div></section><Challenge goal={goal} transactions={transactions} onToggle={onToggle}/><section className="insights"><div><span>💳</span><small>Economia mensal</small><strong>{money(goal.monthlyAmount)}</strong></div><div><span>📅</span><small>Prazo estimado</small><strong>{remaining?`${months} meses`:'Concluída'}</strong></div><div><span>🕐</span><small>Criada em</small><strong>{formatDate(goal.createdAt)}</strong></div></section><button className="add" onClick={onAdd}><Plus/> Adicionar valor</button></main></>}
-function Summary({data,onOpen}:{data:AppData;onOpen:(g:Goal)=>void}){const total=data.goals.reduce((s,g)=>s+goalSaved(g,data.transactions),0),month=data.transactions.filter(t=>new Date(t.createdAt).getMonth()===new Date().getMonth()).reduce((s,t)=>s+t.amount,0);return <><header className="top home-head"><div><small>TERÇA-FEIRA, 1 DE SETEMBRO</small><h1>Olá! <span>👋</span></h1></div><button className="avatar">L</button></header><main><section className="balance"><span>Total economizado</span><strong>{money(total)}</strong><small>em {data.goals.length} meta ativa</small><div><p><b>{data.transactions.length}</b> depósitos realizados</p><p><b>{money(month)}</b> guardados este mês</p></div></section><div className="section-title"><div><span>ACOMPANHE</span><h2>Suas metas</h2></div></div>{data.goals.map(g=><GoalCard key={g.id} goal={g} transactions={data.transactions} onOpen={()=>onOpen(g)}/>)}</main></>}
-function Transactions({data}:{data:AppData}){const sorted=[...data.transactions].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));return <><header className="top"><div><small>SEU HISTÓRICO</small><h1>Transações</h1></div><span className="header-icon"><ArrowLeftRight/></span></header><main className="tx-list">{sorted.length?sorted.map(t=>{const g=data.goals.find(x=>x.id===t.goalId);return <div key={t.id}><span className="tx-icon"><Plus/></span><p><strong>{g?.name}</strong><small>{t.type==='manual'?'Depósito manual':'Desafio'} · {formatDate(t.createdAt)}</small></p><b>+ {money(t.amount)}</b></div>}):<p>Nenhuma transação ainda.</p>}</main></>}
-function Profile({data,setData,soundOn,setSoundOn}:{data:AppData;setData:(d:AppData)=>void;soundOn:boolean;setSoundOn:(v:boolean)=>void}){const file=useRef<HTMLInputElement>(null);const notify=async()=>{if(!('Notification'in window))return alert('Notificações não são suportadas neste navegador.');const p=await Notification.requestPermission();if(p==='granted')new Notification('Lembrete ativado 💚',{body:'A Poupe vai ajudar você a manter o ritmo da sua meta.'})};return <><header className="top"><div><small>PREFERÊNCIAS</small><h1>Perfil</h1></div><span className="header-icon"><Settings/></span></header><main><div className="profile-card"><span>L</span><h2>Seu espaço</h2><p>Seus dados ficam seguros neste dispositivo.</p></div><div className="settings"><button onClick={()=>{setSoundOn(!soundOn);setSound(!soundOn)}}>{soundOn?<Volume2/>:<VolumeX/>}<span><b>Sons do aplicativo</b><small>{soundOn?'Ativados':'Desativados'}</small></span></button><button onClick={notify}><Bell/><span><b>Ativar notificações</b><small>Receba lembretes para poupar</small></span></button><button onClick={()=>storage.export(data)}><Download/><span><b>Exportar meus dados</b><small>Baixar backup em JSON</small></span></button><button onClick={()=>file.current?.click()}><Upload/><span><b>Importar backup</b><small>Restaurar seus dados</small></span></button><input ref={file} hidden type="file" accept="application/json" onChange={async e=>{if(e.target.files?.[0])try{setData(await storage.import(e.target.files[0]));alert('Backup restaurado!')}catch{alert('Não foi possível importar este arquivo.')}}}/></div></main></>}
-function NewGoal({onClose,onCreate}:{onClose:()=>void;onCreate:(g:Goal)=>void}){const[name,setName]=useState(''),[target,setTarget]=useState(''),[monthly,setMonthly]=useState('');return <div className="overlay"><div className="sheet form"><button className="close" onClick={onClose}><X/></button><span className="sheet-icon"><Flag/></span><h2>Nova meta</h2><p>Transforme um plano em pequenos passos.</p><label>Nome da meta<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Fazer uma viagem"/></label><label>Valor desejado<input inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} placeholder="R$ 10.000"/></label><label>Economia mensal<input inputMode="decimal" value={monthly} onChange={e=>setMonthly(e.target.value)} placeholder="R$ 500"/></label><button className="primary" onClick={()=>{const t=Math.round(Number(target.replace(/\D/g,''))*100),m=Math.round(Number(monthly.replace(/\D/g,''))*100);if(name&&t&&m)onCreate({id:uid(),name,targetAmount:t,monthlyAmount:m,createdAt:new Date().toISOString(),emoji:'🎯',challenge:generateSavingsChallenge(t)})}}>Criar minha meta</button></div></div>}
-function Nav({tab,setTab}:{tab:Tab;setTab:(t:Tab)=>void}){return <nav>{([['summary',Home,'Resumo'],['goals',Target,'Metas'],['transactions',ArrowLeftRight,'Transações'],['profile',CircleUserRound,'Perfil']]as const).map(([id,Icon,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}><Icon/><span>{label}</span></button>)}</nav>}
-export default function App(){const[data,setData]=useState(storage.load),[tab,setTab]=useState<Tab>('goals'),[selected,setSelected]=useState<string|null>(data.goals[0]?.id||null),[modal,setModal]=useState<'add'|'new'|null>(null),[celebrate,setCelebrate]=useState<Goal|null>(null),[soundOn,setSoundOn]=useState(true);useEffect(()=>storage.save(data),[data]);const goal=useMemo(()=>data.goals.find(g=>g.id===selected),[data,selected]);const update=(fn:(d:AppData)=>AppData)=>setData(d=>fn(structuredClone(d)));const toggle=(id:string)=>{if(!goal)return;const item=goal.challenge.find(i=>i.id===id);if(!item)return;if(item.completed&&!confirm('Remover este depósito da meta?'))return;update(d=>{const g=d.goals.find(x=>x.id===goal.id)!,i=g.challenge.find(x=>x.id===id)!;if(i.completed){i.completed=false;delete i.completedAt;d.transactions=d.transactions.filter(t=>t.challengeId!==id);sound('remove')}else{i.completed=true;i.completedAt=new Date().toISOString();d.transactions.push({id:uid(),goalId:g.id,amount:i.amount,type:'challenge',createdAt:i.completedAt,challengeId:i.id});sound('deposit');setTimeout(()=>{if(goalSaved(g,d.transactions)>=g.targetAmount){setCelebrate(g);sound('success')}},250)}return d})};const add=(amount:number)=>{if(!goal)return;update(d=>({...d,transactions:[...d.transactions,{id:uid(),goalId:goal.id,amount,type:'manual',createdAt:new Date().toISOString()}]}));sound('deposit');setModal(null)};const open=(g:Goal)=>{setSelected(g.id);setTab('goals')};let content;if(tab==='summary')content=<Summary data={data} onOpen={open}/>;else if(tab==='transactions')content=<Transactions data={data}/>;else if(tab==='profile')content=<Profile data={data} setData={setData} soundOn={soundOn} setSoundOn={setSoundOn}/>;else if(goal)content=<GoalDetail goal={goal} transactions={data.transactions} onToggle={toggle} onAdd={()=>setModal('add')} onBack={()=>setSelected(null)}/>;else content=<><header className="top"><div><small>PLANEJE E REALIZE</small><h1>Minhas metas</h1></div><button className="header-icon" onClick={()=>setModal('new')}><Plus/></button></header><main>{data.goals.map(g=><GoalCard key={g.id} goal={g} transactions={data.transactions} onOpen={()=>setSelected(g.id)}/>)}</main></>;return <div className="app">{content}{tab==='goals'&&selected===null&&<button className="fab" onClick={()=>setModal('new')}><Plus/> Nova meta</button>}<Nav tab={tab} setTab={t=>{setTab(t);if(t==='goals')setSelected(null)}}/>{modal==='add'&&goal&&<AddModal remaining={goal.targetAmount-goalSaved(goal,data.transactions)} onClose={()=>setModal(null)} onAdd={add}/>} {modal==='new'&&<NewGoal onClose={()=>setModal(null)} onCreate={g=>{update(d=>({...d,goals:[...d.goals,g]}));setSelected(g.id);setModal(null)}}/>}{celebrate&&<div className="celebrate"><div>🎉</div><Trophy/><h1>Meta concluída!</h1><p>Você conseguiu juntar {money(celebrate.targetAmount)} para {celebrate.name.toLowerCase()}.</p><button className="primary" onClick={()=>{setCelebrate(null);setTab('summary')}}>Ver resumo</button><button onClick={()=>{setCelebrate(null);setModal('new')}}>Criar nova meta</button></div>}</div>}
+import { useEffect, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Barcode,
+  Bell,
+  Camera,
+  Check,
+  ChevronRight,
+  ClipboardCheck,
+  Grid2X2,
+  History,
+  Menu,
+  PackageSearch,
+  ScanLine,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  X,
+} from 'lucide-react';
+
+type Screen = 'reader' | 'shelf' | 'product';
+type CheckState = 'idle' | 'correct' | 'wrong' | 'missing';
+
+const product = {
+  name: 'Neosaldina',
+  active: 'Dipirona 300mg + Cafeína 50mg',
+  presentation: 'Comprimido • 4 drágeas',
+  code: '7891000001234',
+  price: 'R$ 12,90',
+};
+
+function Brand() {
+  return (
+    <div className="brand" aria-label="Drogarias Maxi Popular">
+      <div className="brand-mark">M</div>
+      <div>
+        <strong>DROGARIAS</strong>
+        <b>MAXI POPULAR</b>
+      </div>
+    </div>
+  );
+}
+
+function Header({ onMenu }: { onMenu: () => void }) {
+  return (
+    <header className="topbar">
+      <Brand />
+      <div className="topbar-actions">
+        <button className="icon-button notification" aria-label="Notificações">
+          <Bell size={19} />
+          <span />
+        </button>
+        <button className="profile" aria-label="Perfil do usuário"><UserRound size={19} /></button>
+        <button className="icon-button menu-button" onClick={onMenu} aria-label="Abrir menu"><Menu size={22} /></button>
+      </div>
+    </header>
+  );
+}
+
+function ScannerModal({ onClose, onDetected }: { onClose: () => void; onDetected: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraState, setCameraState] = useState<'loading' | 'ready' | 'denied'>('loading');
+
+  useEffect(() => {
+    let stream: MediaStream | undefined;
+    navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'environment' } })
+      .then((value) => {
+        stream = value;
+        setCameraState('ready');
+        if (videoRef.current) videoRef.current.srcObject = value;
+      })
+      .catch(() => setCameraState('denied'));
+    return () => stream?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Leitor de QR Code">
+      <div className="scanner-modal">
+        <div className="scanner-head">
+          <div><span className="eyebrow light">LEITOR DE GÔNDOLA</span><h2>Escanear QR Code</h2></div>
+          <button className="close-button" onClick={onClose} aria-label="Fechar"><X /></button>
+        </div>
+        <div className="camera-view">
+          {cameraState === 'ready' && <video ref={videoRef} autoPlay playsInline muted />}
+          {cameraState === 'denied' && <div className="camera-message"><Camera size={34} /><strong>Câmera não autorizada</strong><span>Permita o acesso à câmera para continuar.</span></div>}
+          {cameraState === 'loading' && <div className="camera-message"><ScanLine className="spin" size={34} /><span>Iniciando câmera...</span></div>}
+          <div className="scan-frame"><i /><i /><i /><i /><div className="scan-line" /></div>
+        </div>
+        <p className="scan-hint">Posicione o QR Code dentro da área</p>
+        <button className="demo-scan" onClick={onDetected}><Check size={17} /> Simular leitura da gôndola 03</button>
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ children, tone = 'success' }: { children: React.ReactNode; tone?: 'success' | 'attention' }) {
+  return <span className={`status-pill ${tone}`}><span className="status-dot" />{children}</span>;
+}
+
+function Reader({ onScan }: { onScan: () => void }) {
+  return (
+    <>
+      <section className="hero">
+        <div className="hero-copy"><span className="eyebrow">OPERAÇÃO DE LOJA</span><h1>Olá, Repositor!</h1><p>Vamos deixar cada produto no lugar certo?</p></div>
+        <div className="hero-spark"><Sparkles size={20} /></div>
+      </section>
+      <section className="scan-card card">
+        <div className="section-title"><div><span className="eyebrow blue">COMECE POR AQUI</span><h2>Identifique a gôndola</h2></div><div className="step-count">01 <span>/ 03</span></div></div>
+        <p className="muted">Aponte a câmera para o QR Code da prateleira para identificar o local e conferir os produtos.</p>
+        <div className="qr-illustration"><ScanLine size={52} strokeWidth={1.5} /><span>QR CODE</span></div>
+        <button className="primary-button" onClick={onScan}><Camera size={20} /> Ler QR Code <ChevronRight size={19} /></button>
+        <div className="manual-divider"><span>ou digite o código manualmente</span></div>
+        <div className="manual-row"><div className="input-wrap"><Barcode size={19} /><input placeholder="Código da gôndola" aria-label="Código da gôndola" /></div><button className="secondary-button" onClick={onScan}>Buscar</button></div>
+      </section>
+      <section className="benefits">
+        {[[ShieldCheck, 'PRECISÃO', 'Produto no lugar certo'], [ScanLine, 'AGILIDADE', 'Conferência rápida'], [ClipboardCheck, 'CONFORMIDADE', 'Menos erros na gôndola'], [Grid2X2, 'CONTROLE', 'Visibilidade da operação']].map(([Icon, title, text]) => {
+          const BenefitIcon = Icon as typeof ShieldCheck;
+          return <div className="benefit" key={title as string}><BenefitIcon size={20} /><strong>{title as string}</strong><span>{text as string}</span></div>;
+        })}
+      </section>
+    </>
+  );
+}
+
+function Shelf({ onBack, onProduct }: { onBack: () => void; onProduct: () => void }) {
+  return (
+    <>
+      <button className="back-link" onClick={onBack}><ArrowLeft size={18} /> Voltar ao leitor</button>
+      <section className="page-heading"><div><span className="eyebrow blue">FICHA DA GÔNDOLA</span><h1>Gôndola 03</h1><p>Prateleira 02 <span>•</span> Setor de Analgésicos</p></div><StatusPill>Local conferido</StatusPill></section>
+      <section className="expected-card card"><div className="expected-image"><PackageSearch size={42} /><span>IMAGEM<br />DO PRODUTO</span></div><div className="expected-info"><span className="eyebrow">PRODUTO ESPERADO</span><h2>{product.name}</h2><p>{product.active}</p><div className="product-meta"><span>Apresentação<strong>{product.presentation}</strong></span><span>Preço<strong>{product.price}</strong></span></div></div></section>
+      <section className="card checklist-card"><div className="section-title"><div><span className="eyebrow blue">CONFERÊNCIA VISUAL</span><h2>O que deve estar na gôndola</h2></div><span className="check-score">6/6</span></div><div className="check-list">{['Produto correto', 'Marca correta', 'Apresentação correta', 'Preço correto', 'Etiqueta de preço visível', 'QR Code ativo'].map((item) => <div className="check-item" key={item}><span><Check size={15} /></span>{item}<b>OK</b></div>)}</div></section>
+      <section className="reference card"><div className="reference-photo"><div className="shelf-stripe yellow" /><div className="shelf-boxes"><i /><i /><i /><i /><i /></div><div className="shelf-stripe blue-stripe" /></div><div><span className="eyebrow">REFERÊNCIA VISUAL</span><h3>Foto da gôndola</h3><p className="muted">Use a imagem para encontrar a posição correta.</p></div></section>
+      <button className="primary-button full" onClick={onProduct}><ClipboardCheck size={20} /> Conferir produto encontrado <ChevronRight size={19} /></button>
+    </>
+  );
+}
+
+function Product({ onBack }: { onBack: () => void }) {
+  const [state, setState] = useState<CheckState>('idle');
+  return (
+    <>
+      <button className="back-link" onClick={onBack}><ArrowLeft size={18} /> Ficha da gôndola</button>
+      <section className="page-heading"><div><span className="eyebrow blue">CONFERÊNCIA DO PRODUTO</span><h1>Produto encontrado</h1><p>Gôndola 03 <span>•</span> Prateleira 02</p></div></section>
+      <section className="barcode-card card"><div className="barcode-icon"><Barcode size={32} /></div><div><h2>Escaneie o código de barras</h2><p className="muted">Compare o item encontrado com o produto esperado.</p></div><button className="secondary-button" onClick={() => setState('correct')}><Camera size={18} /> Escanear</button></section>
+      <section className="compare card"><span className="eyebrow blue">PRODUTO ESPERADO</span><div className="compare-product"><div className="product-thumb"><PackageSearch size={28} /></div><div><h2>{product.name}</h2><p>{product.active}</p><strong>{product.code}</strong></div><StatusPill>Esperado</StatusPill></div>{state !== 'idle' && <div className={`result ${state}`}><div className="result-icon">{state === 'correct' ? <Check /> : <AlertCircle />}</div><div><h3>{state === 'correct' ? 'Produto correto' : state === 'wrong' ? 'Produto incorreto' : 'Produto não encontrado'}</h3><p>{state === 'correct' ? 'Este produto corresponde ao item esperado para esta posição.' : 'Confira o produto e registre a ocorrência.'}</p></div></div>}</section>
+      {state === 'idle' && <div className="choice-list"><button onClick={() => setState('correct')}><Check /><span><strong>Produto correto</strong><small>Corresponde ao item esperado</small></span><ChevronRight /></button><button onClick={() => setState('wrong')}><AlertCircle /><span><strong>Produto incorreto</strong><small>Encontrado outro produto</small></span><ChevronRight /></button><button onClick={() => setState('missing')}><X /><span><strong>Produto ausente</strong><small>O item não está nesta posição</small></span><ChevronRight /></button></div>}
+      {state !== 'idle' && <button className="primary-button full" onClick={onBack}><ClipboardCheck size={20} /> Registrar conferência</button>}
+    </>
+  );
+}
+
+function App() {
+  const [screen, setScreen] = useState<Screen>('reader');
+  const [scanner, setScanner] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  return <div className="app-shell"><Header onMenu={() => setMenuOpen((value) => !value)} />{menuOpen && <div className="side-menu"><button onClick={() => setMenuOpen(false)}><X size={18} /> Fechar menu</button>{['Dashboard', 'Leitor de Gôndola', 'Gôndolas', 'Produtos', 'Conferências', 'Histórico', 'Ocorrências', 'Relatórios'].map((item) => <a key={item} href="#">{item}</a>)}</div>}<main>{screen === 'reader' && <Reader onScan={() => setScanner(true)} />}{screen === 'shelf' && <Shelf onBack={() => setScreen('reader')} onProduct={() => setScreen('product')} />}{screen === 'product' && <Product onBack={() => setScreen('shelf')} />}</main>{screen === 'reader' && <nav className="bottom-nav"><a className="active"><ScanLine size={20} />Leitor</a><a><History size={20} />Histórico</a><a><Search size={20} />Buscar</a></nav>}{scanner && <ScannerModal onClose={() => setScanner(false)} onDetected={() => { setScanner(false); setScreen('shelf'); }} />}</div>;
+}
+
+export default App;

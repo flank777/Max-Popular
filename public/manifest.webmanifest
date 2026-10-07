@@ -1,1 +1,9 @@
-{"name":"Poupe — Metas Financeiras","short_name":"Poupe","description":"Seu desafio digital para alcançar metas financeiras.","start_url":"/","scope":"/","display":"standalone","orientation":"portrait-primary","background_color":"#f6f8f5","theme_color":"#0b7a35","icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "Drogarias Maxi Popular | Repositor",
+  "short_name": "Maxi Popular",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f9fa",
+  "theme_color": "#075985",
+  "lang": "pt-BR"
+}
