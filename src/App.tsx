@@ -6,6 +6,7 @@ import {
   Bell,
   Camera,
   Check,
+  CircleCheck,
   ChevronRight,
   ClipboardCheck,
   Grid2X2,
@@ -16,6 +17,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Store,
   UserRound,
   X,
 } from 'lucide-react';
@@ -87,12 +89,18 @@ function Reader({ onScan, onSearch }: { onScan: () => void; onSearch: (value: st
     <>
       <section className="hero">
         <div className="hero-copy">
-          <span className="eyebrow">OPERAÇÃO DE LOJA</span>
+          <span className="eyebrow"><Store size={15} /> OPERAÇÃO DE LOJA</span>
           <h1>Olá, <em>Repositor!</em></h1>
           <p>Vamos deixar cada produto no lugar certo?</p>
         </div>
-        <div className="hero-spark">
-          <Sparkles size={20} />
+        <div className="hero-art" aria-hidden="true">
+          <div className="hero-bottle" />
+          <div className="hero-shelf shelf-top" />
+          <div className="hero-shelf shelf-bottom" />
+          <div className="hero-box box-one" />
+          <div className="hero-box box-two" />
+          <CircleCheck className="hero-check" size={47} />
+          <Sparkles className="hero-spark" size={20} />
         </div>
       </section>
 
