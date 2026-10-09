@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   Grid2X2,
   History,
+  ImageOff,
   Menu,
   PackageSearch,
   ScanLine,
@@ -24,14 +25,16 @@ import {
 import { BarcodeScanner } from './components/scanner/BarcodeScanner';
 import { QRScanner } from './components/scanner/QRScanner';
 import { getConferences, saveConference } from './repositories/conferenceRepository';
+import { getCatalogShelves, searchCatalogProducts } from './repositories/catalogProductRepository';
 import { findGondolaByCode } from './repositories/gondolaRepository';
 import { findProductByCode, searchProducts } from './repositories/productRepository';
 import { compareProducts } from './services/conferenceService';
 import type { ConferenceResult } from './types/conference.types';
+import type { CatalogProduct } from './types/catalogProduct.types';
 import type { Gondola } from './types/gondola.types';
 import type { Product } from './types/product.types';
 
-type Screen = 'reader' | 'shelf' | 'product' | 'history';
+type Screen = 'reader' | 'shelf' | 'product' | 'history' | 'catalog';
 type Result = ConferenceResult;
 
 function Brand() {
@@ -458,6 +461,81 @@ function ProductScreen({
   );
 }
 
+function CatalogScreen({ onBack }: { onBack: () => void }) {
+  const [query, setQuery] = useState('');
+  const [shelf, setShelf] = useState('');
+  const shelves = useMemo(() => getCatalogShelves(), []);
+  const products = useMemo(() => searchCatalogProducts(query, shelf), [query, shelf]);
+
+  return (
+    <>
+      <button className="back-link" onClick={onBack}>
+        <ArrowLeft size={18} /> Voltar ao leitor
+      </button>
+      <section className="page-heading catalog-heading">
+        <div>
+          <span className="eyebrow blue">CATÁLOGO DE PRODUTOS</span>
+          <h1>Produtos cadastrados</h1>
+          <p>Consulte os produtos por nome, marca ou gôndola.</p>
+        </div>
+        <span className="catalog-count">{products.length} / 170</span>
+      </section>
+      <section className="catalog-filters card">
+        <label className="catalog-search input-wrap">
+          <Search size={19} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Pesquisar nome ou marca"
+            aria-label="Pesquisar nome ou marca"
+          />
+        </label>
+        <label className="catalog-shelf-filter">
+          <span>Filtrar por gôndola</span>
+          <select value={shelf} onChange={(event) => setShelf(event.target.value)} aria-label="Filtrar por gôndola">
+            <option value="">Todas as gôndolas</option>
+            {shelves.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+      </section>
+      <section className="catalog-list" aria-live="polite">
+        {products.length === 0 ? (
+          <div className="empty-state card">Nenhum produto encontrado com esses filtros.</div>
+        ) : (
+          products.map((product) => <CatalogProductCard key={product.id} product={product} />)
+        )}
+      </section>
+    </>
+  );
+}
+
+function CatalogProductCard({ product }: { product: CatalogProduct }) {
+  const imageSource = product.image_url?.trim() || product.image_file?.trim();
+  return (
+    <article className="catalog-product card">
+      <div className="catalog-product-image">
+        {imageSource ? (
+          <img src={imageSource} alt="" />
+        ) : (
+          <>
+            <ImageOff size={24} />
+            <span>Sem imagem</span>
+          </>
+        )}
+      </div>
+      <div className="catalog-product-info">
+        <div className="catalog-product-topline">
+          <span className="eyebrow blue">{product.shelf}</span>
+          <span className="image-status">{product.image_status || 'Sem status'}</span>
+        </div>
+        <h2>{product.product_name}</h2>
+        <p>{product.brand}</p>
+        <small>ID: {product.id}</small>
+      </div>
+    </article>
+  );
+}
+
 function formatConferenceDate(date: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
@@ -615,9 +693,12 @@ function App() {
         Histórico
       </a>
       <a
-        className="inactive"
+        className={screen === 'catalog' ? 'active' : ''}
         href="#"
-        onClick={(event) => event.preventDefault()}
+        onClick={(event) => {
+          event.preventDefault();
+          navigate('catalog');
+        }}
       >
         <PackageSearch size={20} />
         Produtos
@@ -646,7 +727,7 @@ function App() {
             ['Dashboard', 'reader'],
             ['Leitor de Gôndola', 'reader'],
             ['Gôndolas', 'reader'],
-            ['Produtos', 'reader'],
+            ['Produtos', 'catalog'],
             ['Conferências', 'history'],
             ['Histórico', 'history'],
             ['Ocorrências', 'history'],
@@ -691,6 +772,7 @@ function App() {
           />
         )}
         {screen === 'history' && <HistoryScreen onBack={() => navigate('reader')} />}
+        {screen === 'catalog' && <CatalogScreen onBack={() => navigate('reader')} />}
       </main>
 
       {bottomNav}
