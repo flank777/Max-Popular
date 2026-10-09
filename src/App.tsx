@@ -28,13 +28,21 @@ import { getConferences, saveConference } from './repositories/conferenceReposit
 import { getCatalogShelves, searchCatalogProducts } from './repositories/catalogProductRepository';
 import { findGondolaByCode } from './repositories/gondolaRepository';
 import { findProductByCode, searchProducts } from './repositories/productRepository';
+import {
+  addProductLot,
+  addProductMovement,
+  calculateStockStatus,
+  getProductDetail,
+  saveProductDetail,
+} from './repositories/productDetailRepository';
 import { compareProducts } from './services/conferenceService';
 import type { ConferenceResult } from './types/conference.types';
 import type { CatalogProduct } from './types/catalogProduct.types';
 import type { Gondola } from './types/gondola.types';
 import type { Product } from './types/product.types';
+import type { ProductDetail } from './types/productDetail.types';
 
-type Screen = 'reader' | 'shelf' | 'product' | 'history' | 'catalog';
+type Screen = 'reader' | 'shelf' | 'product' | 'history' | 'catalog' | 'catalog-detail';
 type Result = ConferenceResult;
 
 function Brand() {
@@ -461,7 +469,7 @@ function ProductScreen({
   );
 }
 
-function CatalogScreen({ onBack }: { onBack: () => void }) {
+function CatalogScreen({ onBack, onOpenProduct }: { onBack: () => void; onOpenProduct: (product: CatalogProduct) => void }) {
   const [query, setQuery] = useState('');
   const [shelf, setShelf] = useState('');
   const shelves = useMemo(() => getCatalogShelves(), []);
@@ -502,19 +510,19 @@ function CatalogScreen({ onBack }: { onBack: () => void }) {
         {products.length === 0 ? (
           <div className="empty-state card">Nenhum produto encontrado com esses filtros.</div>
         ) : (
-          products.map((product) => <CatalogProductCard key={product.id} product={product} />)
+          products.map((product) => <CatalogProductCard key={product.id} product={product} onOpen={onOpenProduct} />)
         )}
       </section>
     </>
   );
 }
 
-function CatalogProductCard({ product }: { product: CatalogProduct }) {
+function CatalogProductCard({ product, onOpen }: { product: CatalogProduct; onOpen: (product: CatalogProduct) => void }) {
   const imageSource = product.image_file?.trim()
     ? `${import.meta.env.BASE_URL}${product.image_file.trim()}`
     : null;
   return (
-    <article className="catalog-product card">
+    <button className="catalog-product card" onClick={() => onOpen(product)} aria-label={`Abrir ficha de ${product.product_name}`}>
       <div className="catalog-product-image">
         {imageSource ? (
           <img src={imageSource} alt="" />
@@ -534,7 +542,146 @@ function CatalogProductCard({ product }: { product: CatalogProduct }) {
         <p>{product.brand}</p>
         <small>ID: {product.id}</small>
       </div>
-    </article>
+    </button>
+  );
+}
+
+function CatalogDetailScreen({ product, onBack }: { product: CatalogProduct; onBack: () => void }) {
+  const [detail, setDetail] = useState<ProductDetail>(() => getProductDetail(product.id));
+  const [editingStock, setEditingStock] = useState(false);
+  const [showImage, setShowImage] = useState(false);
+  const [movementType, setMovementType] = useState<'ENTRADA' | 'SAÍDA' | 'AJUSTE' | 'REPOSIÇÃO'>('ENTRADA');
+  const [movementQuantity, setMovementQuantity] = useState('');
+  const [movementNotes, setMovementNotes] = useState('');
+  const [lotForm, setLotForm] = useState({ lotNumber: '', manufactureDate: '', expiryDate: '', receivedQuantity: '', remainingQuantity: '', supplier: '', notes: '' });
+  const imageSource = product.image_file?.trim() ? `${import.meta.env.BASE_URL}${product.image_file.trim()}` : null;
+  const technical = detail.technical;
+  const safeNote = 'Informação não verificada — consultar a bula ou o farmacêutico.';
+  const technicalValue = (value: string) => value.trim() || safeNote;
+  const saveStock = (field: 'stockQuantity' | 'minimumStock', value: string) => {
+    const number = value === '' ? null : Math.max(0, Number(value));
+    const next = { ...detail, [field]: Number.isNaN(number) ? null : number };
+    next.stockStatus = calculateStockStatus(next.stockQuantity, next.minimumStock);
+    setDetail(saveProductDetail(next));
+  };
+  const saveMovement = () => {
+    const quantity = Number(movementQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    setDetail(addProductMovement(detail, { type: movementType, quantity, notes: movementNotes }));
+    setMovementQuantity('');
+    setMovementNotes('');
+  };
+  const saveLot = () => {
+    if (!lotForm.lotNumber.trim()) return;
+    setDetail(addProductLot(detail, {
+      lotNumber: lotForm.lotNumber.trim(),
+      manufactureDate: lotForm.manufactureDate,
+      expiryDate: lotForm.expiryDate,
+      receivedQuantity: lotForm.receivedQuantity ? Number(lotForm.receivedQuantity) : null,
+      remainingQuantity: lotForm.remainingQuantity ? Number(lotForm.remainingQuantity) : null,
+      receivedAt: new Date().toISOString(),
+      supplier: lotForm.supplier.trim(),
+      notes: lotForm.notes.trim(),
+    }));
+    setLotForm({ lotNumber: '', manufactureDate: '', expiryDate: '', receivedQuantity: '', remainingQuantity: '', supplier: '', notes: '' });
+  };
+
+  return (
+    <>
+      <button className="back-link" onClick={onBack}><ArrowLeft size={18} /> Voltar ao catálogo</button>
+      <section className="product-detail-hero card">
+        <button className="product-detail-image" onClick={() => imageSource && setShowImage(true)} aria-label="Ampliar foto do produto">
+          {imageSource ? <img src={imageSource} alt={product.product_name} /> : <><ImageOff size={30} /><span>Sem imagem</span></>}
+        </button>
+        <div className="product-detail-title">
+          <span className="eyebrow blue">{product.shelf} • {product.id}</span>
+          <h1>{product.product_name}</h1>
+          <p>{product.brand}</p>
+          <StatusPill tone={detail.stockStatus === 'DISPONÍVEL' ? 'success' : 'attention'}>{detail.stockStatus}</StatusPill>
+        </div>
+      </section>
+
+      <section className="detail-actions">
+        <button className="secondary-button" onClick={() => setEditingStock((value) => !value)}>{editingStock ? 'Concluir edição' : 'Editar estoque'}</button>
+        <span className="detail-role">Perfil: Repositor</span>
+      </section>
+
+      <details className="detail-section card" open>
+        <summary>Informações do produto</summary>
+        <div className="detail-grid">
+          {[
+            ['Categoria', technicalValue(technical.category)],
+            ['Composição / princípio ativo', technicalValue(technical.composition)],
+            ['Concentração', technicalValue(technical.concentration)],
+            ['Apresentação', technicalValue(technical.presentation)],
+            ['Forma farmacêutica', technicalValue(technical.pharmaceuticalForm)],
+            ['Tamanho da embalagem', technicalValue(technical.packageSize)],
+            ['Código de barras', product.barcode_sku || technicalValue(technical.barcode)],
+            ['Registro Anvisa', technicalValue(technical.anvisaRegistration)],
+            ['Gôndola / posição', product.shelf],
+          ].map(([label, value]) => <div className="detail-field" key={label}><span>{label}</span><strong>{value}</strong></div>)}
+        </div>
+      </details>
+
+      <details className="detail-section card">
+        <summary>Informações para atendimento</summary>
+        <div className="detail-copy">
+          {[
+            ['Para que serve e indicações', technical.purpose || technical.indications],
+            ['Benefícios e diferenças entre versões', technical.benefits || technical.differences],
+            ['Como usar e administração', technical.usage || technical.dosage],
+            ['Contraindicações e cuidados', technical.contraindications || technical.warnings],
+            ['Interações e efeitos adversos', technical.interactions || technical.adverseEffects],
+            ['Orientação ao cliente', technical.customerSummary],
+          ].map(([label, value]) => <div key={label}><h3>{label}</h3><p>{technicalValue(value)}</p></div>)}
+          <p className="safety-note"><ShieldCheck size={17} /> Esta ficha não diagnostica nem prescreve. Encaminhe dúvidas ao farmacêutico e consulte a bula oficial.</p>
+        </div>
+      </details>
+
+      <details className="detail-section card" open>
+        <summary>Estoque e reposição</summary>
+        <div className="stock-summary">
+          <div><span>Quantidade atual</span>{editingStock ? <input type="number" min="0" value={detail.stockQuantity ?? ''} onChange={(event) => saveStock('stockQuantity', event.target.value)} /> : <strong>{detail.stockQuantity ?? 'Não informada'}</strong>}</div>
+          <div><span>Estoque mínimo</span>{editingStock ? <input type="number" min="0" value={detail.minimumStock ?? ''} onChange={(event) => saveStock('minimumStock', event.target.value)} /> : <strong>{detail.minimumStock ?? 'Não informado'}</strong>}</div>
+          <div><span>Necessária para reposição</span><strong>{detail.replenishmentQuantity ?? 'Não informada'}</strong></div>
+          <div><span>Localização</span><strong>{product.shelf}</strong></div>
+        </div>
+        {editingStock && <div className="movement-form">
+          <h3>Registrar movimentação</h3>
+          <select value={movementType} onChange={(event) => setMovementType(event.target.value as typeof movementType)}><option>ENTRADA</option><option>SAÍDA</option><option>AJUSTE</option><option>REPOSIÇÃO</option></select>
+          <input type="number" min="1" value={movementQuantity} onChange={(event) => setMovementQuantity(event.target.value)} placeholder="Quantidade" />
+          <input value={movementNotes} onChange={(event) => setMovementNotes(event.target.value)} placeholder="Observação (opcional)" />
+          <button className="primary-button" onClick={saveMovement}>Salvar movimentação</button>
+        </div>}
+        {detail.movements.length > 0 && <div className="movement-list">{detail.movements.slice().reverse().map((movement) => <div key={movement.id}><strong>{movement.type} • {movement.quantity}</strong><span>{new Date(movement.date).toLocaleString('pt-BR')} • {movement.user}</span></div>)}</div>}
+      </details>
+
+      <details className="detail-section card" open>
+        <summary>Lotes, fabricação e validade</summary>
+        <div className="lot-list">
+          {detail.lots.length === 0 ? <p className="muted">Nenhum lote registrado. As datas devem ser copiadas da embalagem ou do recebimento.</p> : detail.lots.slice().sort((a, b) => (a.expiryDate || '9999-12-31').localeCompare(b.expiryDate || '9999-12-31')).map((lot) => {
+            const incomplete = !lot.manufactureDate || !lot.expiryDate || lot.remainingQuantity === null;
+            return <div className={`lot-card ${lot.status === 'VENCIDO' || lot.status === 'BLOQUEADO' || incomplete ? 'lot-alert' : ''}`} key={lot.id}><strong>Lote {lot.lotNumber}</strong><span>Fabricação: {lot.manufactureDate || 'Não informada'}</span><span>Validade: {lot.expiryDate || 'Não informada'}</span><span>Restante: {lot.remainingQuantity ?? 'Não informado'} • {incomplete ? 'INFORMAÇÕES INCOMPLETAS' : lot.status}</span></div>;
+          })}
+        </div>
+        {editingStock && <div className="lot-form">
+          <h3>Adicionar lote</h3>
+          <input value={lotForm.lotNumber} onChange={(event) => setLotForm({ ...lotForm, lotNumber: event.target.value })} placeholder="Número do lote *" />
+          <div className="date-row"><input type="date" value={lotForm.manufactureDate} onChange={(event) => setLotForm({ ...lotForm, manufactureDate: event.target.value })} aria-label="Data de fabricação" /><input type="date" value={lotForm.expiryDate} onChange={(event) => setLotForm({ ...lotForm, expiryDate: event.target.value })} aria-label="Data de validade" /></div>
+          <div className="date-row"><input type="number" min="0" value={lotForm.receivedQuantity} onChange={(event) => setLotForm({ ...lotForm, receivedQuantity: event.target.value })} placeholder="Quantidade recebida" /><input type="number" min="0" value={lotForm.remainingQuantity} onChange={(event) => setLotForm({ ...lotForm, remainingQuantity: event.target.value })} placeholder="Quantidade restante" /></div>
+          <input value={lotForm.supplier} onChange={(event) => setLotForm({ ...lotForm, supplier: event.target.value })} placeholder="Fornecedor (opcional)" />
+          <input value={lotForm.notes} onChange={(event) => setLotForm({ ...lotForm, notes: event.target.value })} placeholder="Observações" />
+          <button className="secondary-button" onClick={saveLot}>Salvar lote</button>
+        </div>}
+      </details>
+
+      <details className="detail-section card">
+        <summary>Fontes e revisão</summary>
+        <div className="detail-copy"><p><strong>Situação:</strong> {technical.verificationStatus}</p><p><strong>Fonte:</strong> {technical.sourceName || safeNote}</p><p><strong>Última verificação:</strong> {technical.lastVerifiedAt || safeNote}</p><p><strong>Responsável:</strong> {technical.reviewedBy || safeNote}</p></div>
+      </details>
+
+      {showImage && imageSource && <div className="image-lightbox" role="dialog" aria-label="Foto ampliada" onClick={() => setShowImage(false)}><img src={imageSource} alt={product.product_name} /></div>}
+    </>
   );
 }
 
@@ -625,6 +772,7 @@ function App() {
   const [gondola, setGondola] = useState<Gondola>();
   const [message, setMessage] = useState('');
   const [scannedProduct, setScannedProduct] = useState<Product>();
+  const [selectedCatalogProduct, setSelectedCatalogProduct] = useState<CatalogProduct>();
 
   const showMessage = (value: string) => {
     setMessage(value);
@@ -634,6 +782,11 @@ function App() {
   const navigate = (value: Screen) => {
     setMenuOpen(false);
     setScreen(value);
+  };
+
+  const openCatalogProduct = (product: CatalogProduct) => {
+    setSelectedCatalogProduct(product);
+    navigate('catalog-detail');
   };
 
   const locate = (value: string) => {
@@ -695,7 +848,7 @@ function App() {
         Histórico
       </a>
       <a
-        className={screen === 'catalog' ? 'active' : ''}
+        className={screen === 'catalog' || screen === 'catalog-detail' ? 'active' : ''}
         href="#"
         onClick={(event) => {
           event.preventDefault();
@@ -774,7 +927,10 @@ function App() {
           />
         )}
         {screen === 'history' && <HistoryScreen onBack={() => navigate('reader')} />}
-        {screen === 'catalog' && <CatalogScreen onBack={() => navigate('reader')} />}
+        {screen === 'catalog' && <CatalogScreen onBack={() => navigate('reader')} onOpenProduct={openCatalogProduct} />}
+        {screen === 'catalog-detail' && selectedCatalogProduct && (
+          <CatalogDetailScreen product={selectedCatalogProduct} onBack={() => navigate('catalog')} />
+        )}
       </main>
 
       {bottomNav}
