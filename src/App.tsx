@@ -510,7 +510,9 @@ function CatalogScreen({ onBack }: { onBack: () => void }) {
 }
 
 function CatalogProductCard({ product }: { product: CatalogProduct }) {
-  const imageSource = product.image_url?.trim() || product.image_file?.trim();
+  const imageSource = product.image_file?.trim()
+    ? `${import.meta.env.BASE_URL}${product.image_file.trim()}`
+    : null;
   return (
     <article className="catalog-product card">
       <div className="catalog-product-image">
