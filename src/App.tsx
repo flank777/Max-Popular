@@ -49,7 +49,7 @@ function Brand() {
 
 function Header({ onMenu }: { onMenu: () => void }) {
   return (
-    <header className="topbar">
+    <header className="topbar app-header">
       <Brand />
       <div className="topbar-actions">
         <button className="icon-button notification" aria-label="Notificações">
@@ -591,7 +591,7 @@ function App() {
   };
 
   const bottomNav = (
-    <nav className="bottom-nav">
+    <nav className="bottom-nav app-bottom-nav">
       <a
         className={screen === 'reader' ? 'active' : ''}
         href="#"
@@ -671,7 +671,7 @@ function App() {
         </div>
       )}
 
-      <main>
+      <main className="app-main">
         {screen === 'reader' && <Reader onScan={() => setScanner('qr')} onSearch={locate} />}
         {screen === 'shelf' && gondola && (
           <Shelf
