@@ -8,10 +8,13 @@ import {
   Check,
   CircleCheck,
   ChevronRight,
+  ChevronDown,
   ClipboardCheck,
+  Eye,
   Grid2X2,
   History,
   ImageOff,
+  MapPin,
   Menu,
   PackageSearch,
   ScanLine,
@@ -25,7 +28,7 @@ import {
 import { BarcodeScanner } from './components/scanner/BarcodeScanner';
 import { QRScanner } from './components/scanner/QRScanner';
 import { getConferences, saveConference } from './repositories/conferenceRepository';
-import { getCatalogShelves, searchCatalogProducts } from './repositories/catalogProductRepository';
+import { getCatalogCategories, getCatalogShelves, searchCatalogProducts } from './repositories/catalogProductRepository';
 import { findGondolaByCode } from './repositories/gondolaRepository';
 import { findProductByCode, searchProducts } from './repositories/productRepository';
 import {
@@ -472,8 +475,35 @@ function ProductScreen({
 function CatalogScreen({ onBack, onOpenProduct }: { onBack: () => void; onOpenProduct: (product: CatalogProduct) => void }) {
   const [query, setQuery] = useState('');
   const [shelf, setShelf] = useState('');
+  const [category, setCategory] = useState('');
+  const [page, setPage] = useState(1);
   const shelves = useMemo(() => getCatalogShelves(), []);
-  const products = useMemo(() => searchCatalogProducts(query, shelf), [query, shelf]);
+  const categories = useMemo(() => getCatalogCategories(), []);
+  const products = useMemo(() => searchCatalogProducts(query, shelf, category), [query, shelf, category]);
+  const pageSize = 12;
+  const pageCount = Math.max(1, Math.ceil(products.length / pageSize));
+  const visibleProducts = products.slice((page - 1) * pageSize, page * pageSize);
+  const totalStock = products.reduce((sum, product) => {
+    const quantity = getProductDetail(product.id).stockQuantity;
+    return sum + (quantity ?? 0);
+  }, 0);
+  const availableCount = products.filter((product) => {
+    const detail = getProductDetail(product.id);
+    return detail.stockQuantity !== null && detail.stockStatus === 'DISPONÍVEL';
+  }).length;
+  const lowStockCount = products.filter((product) => {
+    const detail = getProductDetail(product.id);
+    return detail.stockQuantity !== null && detail.stockStatus === 'ESTOQUE BAIXO';
+  }).length;
+  const outOfStockCount = products.filter((product) => {
+    const detail = getProductDetail(product.id);
+    return detail.stockQuantity !== null && detail.stockStatus === 'SEM ESTOQUE';
+  }).length;
+
+  const updateFilter = (setter: (value: string) => void, value: string) => {
+    setter(value);
+    setPage(1);
+  };
 
   return (
     <>
@@ -482,50 +512,87 @@ function CatalogScreen({ onBack, onOpenProduct }: { onBack: () => void; onOpenPr
       </button>
       <section className="page-heading catalog-heading">
         <div>
-          <span className="eyebrow blue">CATÁLOGO DE PRODUTOS</span>
-          <h1>Produtos cadastrados</h1>
-          <p>Consulte os produtos por nome, marca ou gôndola.</p>
+          <h1>Produtos Cadastrados</h1>
+          <p>Consulte os produtos por nome, marca ou gôndola</p>
         </div>
-        <span className="catalog-count">{products.length} / 170</span>
+        <span className="catalog-count">{products.length} resultado{products.length === 1 ? '' : 's'}</span>
       </section>
-      <section className="catalog-filters card">
+      <section className="catalog-filters">
         <label className="catalog-search input-wrap">
           <Search size={19} />
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Pesquisar nome ou marca"
+            onChange={(event) => updateFilter(setQuery, event.target.value)}
+            placeholder="Pesquisar nome ou marca..."
             aria-label="Pesquisar nome ou marca"
           />
+          {query && <button type="button" className="catalog-clear" onClick={() => updateFilter(setQuery, '')} aria-label="Limpar pesquisa"><X size={18} /></button>}
         </label>
-        <label className="catalog-shelf-filter">
-          <span>Filtrar por gôndola</span>
-          <select value={shelf} onChange={(event) => setShelf(event.target.value)} aria-label="Filtrar por gôndola">
-            <option value="">Todas as gôndolas</option>
-            {shelves.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
+        <div className="catalog-selects">
+          <label className="catalog-filter-field">
+            <span><MapPin size={16} /> Gôndola</span>
+            <select value={shelf} onChange={(event) => updateFilter(setShelf, event.target.value)} aria-label="Filtrar por gôndola">
+              <option value="">Todas as gôndolas</option>
+              {shelves.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <ChevronDown size={17} />
+          </label>
+          {categories.length > 0 && (
+            <label className="catalog-filter-field">
+              <span><Grid2X2 size={16} /> Categoria</span>
+              <select value={category} onChange={(event) => updateFilter(setCategory, event.target.value)} aria-label="Filtrar por categoria">
+                <option value="">Todas as categorias</option>
+                {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <ChevronDown size={17} />
+            </label>
+          )}
+        </div>
+      </section>
+      <section className="catalog-summary" aria-label="Resumo do estoque">
+        <div><strong>{products.length}</strong><span>Produtos</span></div>
+        <div><strong>{totalStock}</strong><span>Em estoque</span></div>
+        <div><strong>{lowStockCount}</strong><span>Estoque baixo</span></div>
+        <div><strong>{outOfStockCount}</strong><span>Sem estoque</span></div>
+        <span className="catalog-summary-available">{availableCount} disponível{availableCount === 1 ? '' : 'is'}</span>
       </section>
       <section className="catalog-list" aria-live="polite">
         {products.length === 0 ? (
           <div className="empty-state card">Nenhum produto encontrado com esses filtros.</div>
         ) : (
-          products.map((product) => <CatalogProductCard key={product.id} product={product} onOpen={onOpenProduct} />)
+          visibleProducts.map((product) => <CatalogProductCard key={product.id} product={product} onOpen={onOpenProduct} />)
         )}
       </section>
+      {products.length > 0 && pageCount > 1 && (
+        <nav className="catalog-pagination" aria-label="Paginação do catálogo">
+          <button type="button" disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Anterior</button>
+          <span>Página {page} de {pageCount}</span>
+          <button type="button" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}>Próxima</button>
+        </nav>
+      )}
     </>
   );
 }
 
 function CatalogProductCard({ product, onOpen }: { product: CatalogProduct; onOpen: (product: CatalogProduct) => void }) {
+  const detail = getProductDetail(product.id);
   const imageSource = product.image_file?.trim()
     ? `${import.meta.env.BASE_URL}${product.image_file.trim()}`
     : null;
+  const presentation = detail.technical.presentation.trim() || 'Apresentação não informada';
+  const stockLabel = detail.stockQuantity === null ? 'Quantidade não informada' : `${detail.stockQuantity} un.`;
+  const replenishment = detail.stockQuantity === null
+    ? { label: 'Não informado', tone: 'neutral' }
+    : detail.stockStatus === 'SEM ESTOQUE'
+      ? { label: 'Reposição urgente', tone: 'danger' }
+    : detail.stockStatus === 'ESTOQUE BAIXO'
+      ? { label: 'Em breve', tone: 'warning' }
+      : { label: 'Não necessária', tone: 'success' };
   return (
-    <button className="catalog-product card" onClick={() => onOpen(product)} aria-label={`Abrir ficha de ${product.product_name}`}>
+    <article className="catalog-product card">
       <div className="catalog-product-image">
         {imageSource ? (
-          <img src={imageSource} alt="" />
+          <img src={imageSource} alt={product.product_name} />
         ) : (
           <>
             <ImageOff size={24} />
@@ -534,15 +601,23 @@ function CatalogProductCard({ product, onOpen }: { product: CatalogProduct; onOp
         )}
       </div>
       <div className="catalog-product-info">
-        <div className="catalog-product-topline">
-          <span className="eyebrow blue">{product.shelf}</span>
-          <span className="image-status">{product.image_status || 'Sem status'}</span>
-        </div>
+        <span className="catalog-product-brand">{product.brand}</span>
         <h2>{product.product_name}</h2>
-        <p>{product.brand}</p>
-        <small>ID: {product.id}</small>
+        <p>{presentation}</p>
+        <span className="catalog-shelf"><MapPin size={14} /> {product.shelf}</span>
+        <span className={`catalog-stock ${detail.stockQuantity === null ? 'estoque-nao-informado' : detail.stockStatus.toLowerCase().replace(/ /g, '-')}`}>
+          <span /> {detail.stockQuantity === null ? 'Estoque não informado' : detail.stockStatus === 'DISPONÍVEL' ? 'Em estoque' : detail.stockStatus.toLowerCase()}
+        </span>
+        <small>Qtd: {stockLabel}</small>
       </div>
-    </button>
+      <div className={`catalog-replenishment ${replenishment.tone}`}>
+        <strong><span /> Reposição</strong>
+        <small>{replenishment.label}</small>
+      </div>
+      <button className="catalog-detail-button" onClick={() => onOpen(product)} aria-label={`Ver detalhes de ${product.product_name}`}>
+        <Eye size={17} /> Ver detalhes <ChevronRight size={17} />
+      </button>
+    </article>
   );
 }
 

@@ -1,4 +1,5 @@
 import catalogData from '../data/catalog/catalogoProdutosMaxPopular.json';
+import { getProductDetail } from './productDetailRepository';
 import type { CatalogProduct } from '../types/catalogProduct.types';
 
 function isCatalogProduct(item: unknown): item is CatalogProduct {
@@ -24,12 +25,21 @@ export function getCatalogShelves(): string[] {
   return [...new Set(catalogProducts.map((product) => product.shelf))].sort();
 }
 
-export function searchCatalogProducts(query: string, shelf = ''): CatalogProduct[] {
+export function getCatalogCategories(): string[] {
+  return [...new Set(
+    catalogProducts
+      .map((product) => getProductDetail(product.id).technical.category.trim())
+      .filter(Boolean),
+  )].sort((left, right) => left.localeCompare(right, 'pt-BR'));
+}
+
+export function searchCatalogProducts(query: string, shelf = '', category = ''): CatalogProduct[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   return catalogProducts.filter((product) => {
     const matchesQuery = !normalizedQuery
       || `${product.product_name} ${product.brand}`.toLocaleLowerCase().includes(normalizedQuery);
     const matchesShelf = !shelf || product.shelf === shelf;
-    return matchesQuery && matchesShelf;
+    const matchesCategory = !category || getProductDetail(product.id).technical.category === category;
+    return matchesQuery && matchesShelf && matchesCategory;
   });
 }
